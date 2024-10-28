@@ -425,7 +425,14 @@ Task("Externals-Uwp-IL2CPP-Dependencies")
     }
 }).OnError(HandleError);
 
+Task("RestorePackagesForNewtonsoftJson")
+    .Does(() =>
+{
+    NuGetRestore("./Modules/Newtonsoft.Json-for-Unity/Src/Newtonsoft.Json/Newtonsoft.Json.csproj");
+});
+
 Task("BuildNewtonsoftJson")
+    .IsDependentOn("RestorePackagesForNewtonsoftJson")
     .WithCriteria(IsRunningOnWindows)
     .Does(() =>
 {
@@ -436,11 +443,10 @@ Task("BuildNewtonsoftJson")
 
     Information("Building Newtonsoft.Json project...");
     MSBuild(Path.Combine(projectPath, "Newtonsoft.Json.csproj"), c => c
-        .WithRestore()
         .WithProperty("UnityBuild", "AOT")
         .SetConfiguration("Release"));
 
-    Information($"Moveing Newtonsoft.Json to {outputDirectory}...");
+    Information($"Moving Newtonsoft.Json to {outputDirectory}...");
     DeleteFileIfExists(Path.Combine(outputDirectory, assemblyName));
     MoveFileToDirectory(assemblyPath, outputDirectory);
 }).OnError(HandleError);

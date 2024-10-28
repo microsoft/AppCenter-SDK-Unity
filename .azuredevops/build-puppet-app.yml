@@ -1,0 +1,74 @@
+pr:
+- master
+
+pool:
+  name: 1ES-PT-Windows-2019
+  os: windows
+
+variables:
+- group: 'AppCenter-SDK Unity Credentials and Info'
+- group: 'appcenter-sdk Internal NuGet feed credentials'
+- name: Codeql.Cadence
+  value: 0
+
+jobs:
+- job:
+  displayName: Build and CodeQL PuppetApp Android
+  steps:
+  - checkout: self
+    submodules: recursive
+
+  - task: CodeQL3000Init@0
+    displayName: CodeQL Initialize
+
+  - task: AzureKeyVault@2
+    displayName: 'Download KeyValult Variables'
+    inputs:
+      azureSubscription: 'AC - Dev Infra & Build Pool'
+      KeyVaultName: 'mobile-center-sdk'
+      SecretsFilter: 'appcenter-sdk-unity-serial-number-windows,appcenter-sdk-unity-username,appcenter-sdk-unity-password,appcensk-appcenter-token,appcenter-sdk-blob-storage-access-secret'
+      RunAsPreJob: false
+
+  - task: PowerShell@2
+    displayName: 'Install Unity'
+    inputs:
+      targetType: filePath
+      filePath: ./build.ps1
+      arguments: '-Target="Install-Unity-Windows" -Verbosity="Diagnostic"'
+
+  - task: PowerShell@2
+    displayName: 'Activate Unity'
+    inputs:
+      targetType: filePath
+      filePath: ./build.ps1
+      arguments: '-Target="RegisterUnity" -UnitySerialNumber="$(appcenter-sdk-unity-serial-number-windows)" -UnityUsername="$(appcenter-sdk-unity-username)" -UnityPassword="$(appcenter-sdk-unity-password)" -Verbosity="Diagnostic"'
+
+  - task: PowerShell@2
+    displayName: 'Download Android NDK'
+    inputs:
+      targetType: 'inline'
+      script: |
+        & ./build.ps1 --target="DownloadNdk" --NdkUrl="$(ANDROID_NDK_URL)" --Verbosity="Diagnostic"
+
+  - task: UseDotNet@2
+    displayName: 'Use .Net Core sdk 3.0.100'
+    inputs:
+      version: 3.0.100
+
+  - task: PowerShell@2
+    displayName: 'Run Cake Target "BuildPuppetApps"'
+    inputs:
+      targetType: 'inline'
+      script: |
+        & ./build.ps1 --target="BuildPuppetApps" --NuGetPassword="$(NUGET_PASSWORD)" --NuGetFeedId="$(NUGET_FEED_ID)" --Verbosity="Diagnostic" --StorageAuthParams="$(STORAGE_AUTH_PARAMS)"
+
+  - task: PowerShell@2
+    displayName: 'Unregister Unity'
+    inputs:
+      targetType: filePath
+      filePath: ./build.ps1
+      arguments: '-Target="UnregisterUnity" -UnitySerialNumber="$(appcenter-sdk-unity-serial-number-windows)" -UnityUsername="$(appcenter-sdk-unity-username)" -UnityPassword="$(appcenter-sdk-unity-password)" -Verbosity="Diagnostic"'
+    condition: always()
+
+  - task: CodeQL3000Finalize@0
+    displayName: CodeQL Finalize
